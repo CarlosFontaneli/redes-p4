@@ -43,22 +43,59 @@ class Enlace:
     def __init__(self, linha_serial):
         self.linha_serial = linha_serial
         self.linha_serial.registrar_recebedor(self.__raw_recv)
+        self.trash = ""
 
     def registrar_recebedor(self, callback):
         self.callback = callback
 
     def enviar(self, datagrama):
-        # TODO: Preencha aqui com o código para enviar o datagrama pela linha
-        # serial, fazendo corretamente a delimitação de quadros e o escape de
-        # sequências especiais, de acordo com o protocolo CamadaEnlace (RFC 1055).
+
+        ds = b''
+        list_data = list(datagrama)
+
+        for i in range(len(list_data)):
+            if list_data[i] == 0xc0:
+                ds += bytes([0xdb])
+                ds += bytes([0xdc])
+
+            elif list_data[i] == 0xdb:
+                ds += bytes([0xdb])
+                ds += bytes([0xdd])
+
+            else:
+                ds += bytes([list_data[i]])
+
+        self.linha_serial.enviar(
+            bytes([0xc0]) + ds + bytes([0xc0]))
         pass
 
     def __raw_recv(self, dados):
-        # TODO: Preencha aqui com o código para receber dados da linha serial.
-        # Trate corretamente as sequências de escape. Quando ler um quadro
-        # completo, repasse o datagrama contido nesse quadro para a camada
-        # superior chamando self.callback. Cuidado pois o argumento dados pode
-        # vir quebrado de várias formas diferentes - por exemplo, podem vir
-        # apenas pedaços de um quadro, ou um pedaço de quadro seguido de um
-        # pedaço de outro, ou vários quadros de uma vez só.
+        self.trash += dados.hex()
+
+        while self.trash.find("c0") != -1:
+
+            p = self.trash.partition("c0")[0]
+            self.trash = self.trash.partition("c0")[2]
+
+            if p == "":
+                continue
+
+            pe = ""
+
+            i = 0
+            while i+1 < len(p):
+                if p[i:i+2] == "db":
+                    i += 2
+                    if p[i:i+2] == "dc":
+                        pe = pe + "c0"
+                    if p[i:i+2] == "dd":
+                        pe = pe + "db"
+                else:
+                    pe = pe + p[i:i+2]
+                i += 2
+            try:
+                self.callback(bytes.fromhex(pe))
+
+            except:
+                pass
         pass
